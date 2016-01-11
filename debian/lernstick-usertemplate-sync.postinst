@@ -1,0 +1,24 @@
+#!/bin/sh
+
+set -e
+
+case "$1" in
+    configure)
+        # Run lernstick-usertemplate-sync once for the first install
+        [ -z "$2" ] && lernstick-usertemplate-sync
+        ;;
+    triggered)
+        # This is triggered by any changes to /etc/skel by packages
+        test -x /usr/sbin/lernstick-usertemplate-sync && lernstick-usertemplate-sync
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0
