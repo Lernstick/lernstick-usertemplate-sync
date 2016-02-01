@@ -43,6 +43,8 @@ IFS=$'\n'
 for f in $(find $TEMPLATEDIR -type f ! -name '*.dpkg-*' ! -name '*.bak' ! -name '*~') ; do
 
     dest_file="${USERHOME}/${f#${TEMPLATEDIR}/}"
+    # escaped version for use in basic regular expressions
+    dest_file_escaped=$(echo "${dest_file}" | sed 's/[.[\*^$]/\\&/g')
 
     # Extract UCF state of current file and remove from the list of
     # registered files
@@ -50,9 +52,9 @@ for f in $(find $TEMPLATEDIR -type f ! -name '*.dpkg-*' ! -name '*.bak' ! -name 
     # subshell! And don't fail if the file is not (yet) registered.
     # Comand substitution doesn't work either because it interferes badly
     # with debconf
-    ucfq_line="$(echo "$registered" | egrep "^${dest_file}:" || true)"
+    ucfq_line="$(echo "$registered" | grep "^${dest_file_escaped}:" || true)"
     IFS=':' read ucf_file package exists changed <<< "$ucfq_line" || true
-    registered=$(echo "$registered" | egrep -v "^${dest_file}:" || true)
+    registered=$(echo "$registered" | grep -v "^${dest_file_escaped}:" || true)
 
     # Sync file with UCF and register new files
     if ! ucf --debconf-ok --state-dir "${UCFDIR}" "$f" "$dest_file" ; then
