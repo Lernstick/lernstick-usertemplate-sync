@@ -90,6 +90,7 @@ if [ -n "$registered" ] ; then
         # Unregister file
         echo -n "Unregistering ${ucf_file} ... "
         ucfr --purge --state-dir "$UCFDIR" "${USER}" "${ucf_file}"
+        ucf --purge --state-dir "$UCFDIR" "${ucf_file}"
         echo "done."
     done
 fi
