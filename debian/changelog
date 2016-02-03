@@ -1,3 +1,11 @@
+lernstick-usertemplate-sync (2) lernstick-8; urgency=medium
+
+  * [ab435b] Escape special regex characters in filenames
+  * [1090e9] Also purge file hashes
+  * [44b36e] Sync symbolic links
+
+ -- Gaudenz Steinlin <gaudenz@debian.org>  Wed, 03 Feb 2016 18:10:27 +0100
+
 lernstick-usertemplate-sync (1) lernstick-8; urgency=low
 
   * Initial Release.
