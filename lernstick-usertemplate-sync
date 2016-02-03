@@ -14,10 +14,19 @@ TEMPLATEDIR="/etc/skel"
 USER="user"
 GROUP="$(id --group --name ${USER})"
 USERHOME=$( getent passwd "$USER" | cut -d: -f6 )
-UCFDIR="/var/lib/lernstick-usertemplate-sync/${USER}/ucf"
+VARDIR="/var/lib/lernstick-usertemplate-sync/${USER}"
+UCFDIR="${VARDIR}/ucf"
+LINKSTATE="${VARDIR}/links"
+FIND_EXCLUDES="! -name '*.dpkg-*' ! -name '*.bak' ! -name '*~'"
 
 # Abort if the users home directory does not exist
 [ -d $USERHOME ] || exit 0
+
+# Create vardir
+[ -d "$VARDIR" ] || mkdir -p "$VARDIR"
+
+# Create link state file if it does not exist
+[ -e "$LINKSTATE" ] || touch "$LINKSTATE"
 
 # Sync directory structure
 # TODO remove directories removed
@@ -37,10 +46,61 @@ echo "Syncing config files ..."
 
 # get list of already registered files
 registered=$(ucfq --state-dir "$UCFDIR" --with-colons "$USER")
+links_registered=$(cat $LINKSTATE)
+
+# create file and link list before changing IFS otherwise the
+# command parameters in a var won't work
+link_list="$(find $TEMPLATEDIR -type l $FIND_EXCLUDES)"
+file_list="$(find $TEMPLATEDIR -type f $FIND_EXCLUDES)"
 
 OIFS="$IFS"
 IFS=$'\n'
-for f in $(find $TEMPLATEDIR -type f ! -name '*.dpkg-*' ! -name '*.bak' ! -name '*~') ; do
+
+# UCF does not handle symlinks, sync those manually
+
+for f in $link_list ; do
+    dest_file="${USERHOME}/${f#${TEMPLATEDIR}/}"
+    # escaped version for use in basic regular expressions and sed
+    dest_file_escaped=$(echo "${dest_file}" | sed 's/[.[/\*^$]/\\&/g')
+    link="$(readlink $f || true)"
+    link_escaped=$(echo "${link}" | sed 's/[.[/\*^$]/\\&/g')
+    link_line=$(echo "$links_registered" | grep "^${dest_file_escaped}:" || true)
+
+    if [ -z "$link_line" ] ; then
+        # Destination file is not registered
+        if [ ! -e "$dest_file" -a ! -L "$dest_file" ] ; then
+            # destination does not exist, create symlink
+            echo -n "Creating symlink ${dest_file} -> ${link} ... "
+            ln -s  "$link" "$dest_file" && echo "done." || echo "failed."
+            echo -n "Setting user and group to ${USER}:${GROUP} on ${dest_file} ... "
+            chown --no-dereference "$USER:$GROUP" "$dest_file" && echo "done." ||  echo "failed."
+        fi
+        # register file
+        echo -n "Registering symlink ${dest_file} ... "
+        echo "${dest_file}:${link}" >> $LINKSTATE && echo "done." || echo "failed."
+    else
+        # file is registered
+        links_registered=$(echo "$links_registered" | grep -v "^${dest_file_escaped}:" || true)
+        IFS=':' read file old_link <<< """$link_line"""
+        if [ "$link" != "$old_link" ] ; then
+            # Link destination changed
+            if [ "$(readlink $dest_file)" = "$old_link" ] ; then
+                # Link changed in template directory, unchanged in destination
+                # => change link
+                echo -n "Changing symlink ${dest_file} -> ${old_link} to ${dest_file} -> ${link} ... "
+                rm -f "$dest_file" || true
+                ln -s "$link" "$dest_file" && echo "done." || echo "failed."
+                echo -n "Setting user and group to ${USER}:${GROUP} on ${dest_file} ... "
+                chown --no-dereference "$USER:$GROUP" "$dest_file" && echo "done." ||  echo "failed."
+            fi
+            # change registration
+            echo -n "Updating symlink registration of ${dest_file} ... "
+            sed -ie "s/^${dest_file_escaped}:.*$/${dest_file_escaped}:${link_escaped}/" $LINKSTATE && echo "done." || echo "failed."
+        fi
+    fi
+done
+
+for f in $file_list ; do
 
     dest_file="${USERHOME}/${f#${TEMPLATEDIR}/}"
     # escaped version for use in basic regular expressions
@@ -72,7 +132,22 @@ for f in $(find $TEMPLATEDIR -type f ! -name '*.dpkg-*' ! -name '*.bak' ! -name 
         fi
     fi
 done
-IFS="$OIFS"
+
+if [ -n "$links_registered" ] ; then
+    # Unregister and delete all remaining registered links if unmodified. They no longer
+    # exist in the template directory
+    for f in $links_registered; do
+        IFS=':' read file link <<< """$f"""
+        if [ "$(readlink $file)" = "$link" ] ; then
+           # link is unchanged
+           rm -f $file
+        fi
+        # remove link from registration file
+        echo -n "Unregistering symlink ${file} ... "
+        f_escaped=$(echo "$f" | sed 's/[.[/\*^$]/\\&/g')
+        sed -ie "/^${f_escaped}$/d" $LINKSTATE && echo "done." || echo "failed."
+    done
+fi
 
 if [ -n "$registered" ] ; then
     # Unregister and delete all remaining registered files. They no longer
@@ -94,3 +169,5 @@ if [ -n "$registered" ] ; then
         echo "done."
     done
 fi
+
+IFS="$OIFS"
