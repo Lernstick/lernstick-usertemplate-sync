@@ -1,3 +1,9 @@
+lernstick-usertemplate-sync (3) lernstick-8; urgency=medium
+
+  * [8b455c] check if user exits before running so that package can be installed during system build where the user doesn't exist yet
+
+ -- Ronny Standtke <ronny.standtke@gmx.net>  Sat, 06 Feb 2016 14:37:08 +0100
+
 lernstick-usertemplate-sync (2) lernstick-8; urgency=medium
 
   * [ab435b] Escape special regex characters in filenames
