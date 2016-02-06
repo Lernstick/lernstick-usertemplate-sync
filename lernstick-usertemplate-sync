@@ -12,6 +12,13 @@ exec > >(tee --append --ignore-interrupts $LOGFILE) 2>&1
 
 TEMPLATEDIR="/etc/skel"
 USER="user"
+
+# check if user exists
+if ! id --group --name ${USER} > /dev/null 2>&1
+then
+	exit
+fi
+
 GROUP="$(id --group --name ${USER})"
 USERHOME=$( getent passwd "$USER" | cut -d: -f6 )
 VARDIR="/var/lib/lernstick-usertemplate-sync/${USER}"
