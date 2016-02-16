@@ -13,11 +13,8 @@ exec > >(tee --append --ignore-interrupts $LOGFILE) 2>&1
 TEMPLATEDIR="/etc/skel"
 USER="user"
 
-# check if user exists
-if ! id --group --name ${USER} > /dev/null 2>&1
-then
-	exit
-fi
+# Abort if the user does not exists
+id --user --name ${USER} > /dev/null 2>&1 || exit 0
 
 GROUP="$(id --group --name ${USER})"
 USERHOME=$( getent passwd "$USER" | cut -d: -f6 )
