@@ -1,0 +1,4 @@
+debian/files
+debian/lernstick-usertemplate-sync.debhelper.log
+debian/lernstick-usertemplate-sync.substvars
+debian/lernstick-usertemplate-sync/
