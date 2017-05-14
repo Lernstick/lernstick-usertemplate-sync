@@ -1,3 +1,9 @@
+lernstick-usertemplate-sync (5) lernstick-8; urgency=medium
+
+  * [5353cf] ignore *.dpkg-new files, fill registry even when user doesn't exist yet
+
+ -- Ronny Standtke <ronny.standtke@gmx.net>  Sun, 14 May 2017 20:44:15 +0200
+
 lernstick-usertemplate-sync (4) lernstick-8; urgency=medium
 
   [ Gaudenz Steinlin ]
