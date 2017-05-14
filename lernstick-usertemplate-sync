@@ -2,176 +2,101 @@
 
 set -e
 
-# Load debconf to avoid loading it at every ucf invocation
-. /usr/share/debconf/confmodule
-
 # copy stdout and stderr to /var/log/lernstick-usertemplate-sync.log
 LOGFILE="/var/log/lernstick-usertemplate-sync.log"
 echo "========= lernstick-usertemplate-sync run started at $(date)" >> $LOGFILE
 exec > >(tee --append --ignore-interrupts $LOGFILE) 2>&1
 
-TEMPLATEDIR="/etc/skel"
+TEMPLATEDIR="/etc/skel/"
 USER="user"
 
-# Abort if the user does not exists
-id --user --name ${USER} > /dev/null 2>&1 || exit 0
+# abort if the user doesn't exist yet (happens during installation time)
+id --user --name "${USER}" > /dev/null 2>&1 || exit 0
 
 GROUP="$(id --group --name ${USER})"
-USERHOME=$( getent passwd "$USER" | cut -d: -f6 )
-VARDIR="/var/lib/lernstick-usertemplate-sync/${USER}"
-UCFDIR="${VARDIR}/ucf"
-LINKSTATE="${VARDIR}/links"
-FIND_EXCLUDES="! -name '*.dpkg-*' ! -name '*.bak' ! -name '*~'"
+USERHOME="$(getent passwd "${USER}" | cut -d: -f6)"
 
-# Abort if the users home directory does not exist
-[ -d $USERHOME ] || exit 0
+# abort if the users home directory does not exist
+[ -d "${USERHOME}" ] || exit 0
 
-# Create vardir
-[ -d "$VARDIR" ] || mkdir -p "$VARDIR"
+# the REGDIR contains the last unmodified version of every config file
+REGDIR="/var/lib/lernstick-usertemplate-sync/${USER}"
 
-# Create link state file if it does not exist
-[ -e "$LINKSTATE" ] || touch "$LINKSTATE"
+# create regdir
+[ -d "$REGDIR" ] || mkdir -p "$REGDIR"
 
-# Sync directory structure
-# TODO remove directories removed
-echo "Syncing directory structure ..."
-find ${TEMPLATEDIR} -mindepth 1 -type d -print0 | while read -d $'\0' d ; do
-    dir="${USERHOME}/${d#${TEMPLATEDIR}/}"
-    if [ ! -e "$dir" ] ; then
-        # Copy directory and set permissions if it does not yet exist
-        echo -n "Copying ${dir} ... "
-        cp --archive $d $dir && \
-        chown --recursive "$USER:$GROUP" "$dir" && echo "done." || echo "failed."
-    fi
-done
+# copy *only(!)* new files to REGDIR
+cd "${TEMPLATEDIR}"
+cp -anv . "${REGDIR}"
 
-# Sync config files
-echo "Syncing config files ..."
+sync_with_home()
+{
+	cp -av --parents "${1}" "${USERHOME}"
+	chown --recursive "$USER:$GROUP" "${USERHOME}/${1}"
+}
 
-# get list of already registered files
-registered=$(ucfq --state-dir "$UCFDIR" --with-colons "$USER")
-links_registered=$(cat $LINKSTATE)
+# sync template files to user's home and unmodified files to registry
+sync_template()
+{
+	# remove template prefix from filename
+	FILE="$(echo "$1" | sed -e "s|^${TEMPLATEDIR}||")"
 
-# create file and link list before changing IFS otherwise the
-# command parameters in a var won't work
-link_list="$(find $TEMPLATEDIR -type l $FIND_EXCLUDES)"
-file_list="$(find $TEMPLATEDIR -type f $FIND_EXCLUDES)"
+	# check if template file already exists in user's home
+	if [ -f "${USERHOME}/${FILE}" ]
+	then
+		# handling for already existing normal files
+		echo "${FILE} is already in user's home"
 
-OIFS="$IFS"
-IFS=$'\n'
+		# check if user modified the file
+		if cmp -s "${REGDIR}/${FILE}" "${USERHOME}/${FILE}"
+		then
+			echo "${FILE} is unmodified"
+			# check if there is a new version in the template
+			if cmp -s "${REGDIR}/${FILE}" "${TEMPLATEDIR}/${FILE}"
+			then
+				echo "${FILE} has no new version in the template"
+			else
+				echo "${FILE} has a new version in the template"
+				# copy file to home and registry
+				sync_with_home "${FILE}"
+				cp -av --parents "${FILE}" "${REGDIR}"
+			fi
+		else
+			echo "${FILE} is modified"
+		fi
 
-# UCF does not handle symlinks, sync those manually
+	elif [ -d "${USERHOME}/${FILE}" ]
+	then
+		# handling for already existing directories
+		echo "${FILE} is already in user's home"
+		# TODO: is there anything to do for already existing directories?
 
-for f in $link_list ; do
-    dest_file="${USERHOME}/${f#${TEMPLATEDIR}/}"
-    # escaped version for use in basic regular expressions and sed
-    dest_file_escaped=$(echo "${dest_file}" | sed 's/[.[/\*^$]/\\&/g')
-    link="$(readlink $f || true)"
-    link_escaped=$(echo "${link}" | sed 's/[.[/\*^$]/\\&/g')
-    link_line=$(echo "$links_registered" | grep "^${dest_file_escaped}:" || true)
+	elif [ -h "${USERHOME}/${FILE}" ]
+	then
+		# handling for alredy existing symlinks
+		echo "${FILE} is already in user's home"
 
-    if [ -z "$link_line" ] ; then
-        # Destination file is not registered
-        if [ ! -e "$dest_file" -a ! -L "$dest_file" ] ; then
-            # destination does not exist, create symlink
-            echo -n "Creating symlink ${dest_file} -> ${link} ... "
-            ln -s  "$link" "$dest_file" && echo "done." || echo "failed."
-            echo -n "Setting user and group to ${USER}:${GROUP} on ${dest_file} ... "
-            chown --no-dereference "$USER:$GROUP" "$dest_file" && echo "done." ||  echo "failed."
-        fi
-        # register file
-        echo -n "Registering symlink ${dest_file} ... "
-        echo "${dest_file}:${link}" >> $LINKSTATE && echo "done." || echo "failed."
-    else
-        # file is registered
-        links_registered=$(echo "$links_registered" | grep -v "^${dest_file_escaped}:" || true)
-        IFS=':' read file old_link <<< """$link_line"""
-        if [ "$link" != "$old_link" ] ; then
-            # Link destination changed
-            if [ "$(readlink $dest_file)" = "$old_link" ] ; then
-                # Link changed in template directory, unchanged in destination
-                # => change link
-                echo -n "Changing symlink ${dest_file} -> ${old_link} to ${dest_file} -> ${link} ... "
-                rm -f "$dest_file" || true
-                ln -s "$link" "$dest_file" && echo "done." || echo "failed."
-                echo -n "Setting user and group to ${USER}:${GROUP} on ${dest_file} ... "
-                chown --no-dereference "$USER:$GROUP" "$dest_file" && echo "done." ||  echo "failed."
-            fi
-            # change registration
-            echo -n "Updating symlink registration of ${dest_file} ... "
-            sed -ie "s/^${dest_file_escaped}:.*$/${dest_file_escaped}:${link_escaped}/" $LINKSTATE && echo "done." || echo "failed."
-        fi
-    fi
-done
+		if [ $(readlink -f "${REGDIR}/${FILE}") = $(readlink -f "${USERHOME}/${FILE}") ]
+		then
+			echo "${FILE} is unmodified"
+			# check if there is a new version in the template
+			if [ $(readlink -f "${REGDIR}/${FILE}") = $(readlink -f "${TEMPLATEDIR}/${FILE}") ]
+			then
+				echo "${FILE} has no new version in the template"
+			else
+				echo "${FILE} has a new version in the template"
+				# copy file to home and registry
+				sync_with_home "${FILE}"
+				cp -av --parents "${FILE}" "${REGDIR}"
+			fi
+		else
+			echo "${FILE} is modified"
+		fi
 
-for f in $file_list ; do
-
-    dest_file="${USERHOME}/${f#${TEMPLATEDIR}/}"
-    # escaped version for use in basic regular expressions
-    dest_file_escaped=$(echo "${dest_file}" | sed 's/[.[\*^$]/\\&/g')
-
-    # Extract UCF state of current file and remove from the list of
-    # registered files
-    # A pipe does not work here as it would execute the read in a
-    # subshell! And don't fail if the file is not (yet) registered.
-    # Comand substitution doesn't work either because it interferes badly
-    # with debconf
-    ucfq_line="$(echo "$registered" | grep "^${dest_file_escaped}:" || true)"
-    IFS=':' read ucf_file package exists changed <<< "$ucfq_line" || true
-    registered=$(echo "$registered" | grep -v "^${dest_file_escaped}:" || true)
-
-    # Sync file with UCF and register new files
-    if ! ucf --debconf-ok --state-dir "${UCFDIR}" "$f" "$dest_file" ; then
-        echo "Failed to sync ${f}!" >&2
-    else
-        if [ ! "$package" = "$USER" ] ; then
-            # register with UCF, we set the package field to $USER
-            echo -n "Registering ${dest_file} with UCF ... "
-            ucfr --state-dir "$UCFDIR" "$USER" "$dest_file" && echo "done." || echo "failed."
-        fi
-        # TODO find a way to preserve ownership changes done by the user
-        if [ -e "${dest_file}" ] && [ "$(stat -c %U:%G ${dest_file})" != "${USER}:${GROUP}" ] ; then
-            echo -n "Setting user and group to ${USER}:${GROUP} on ${dest_file} ... "
-            chown "$USER:$GROUP" "$dest_file" && echo "done." ||  echo "failed."
-        fi
-    fi
-done
-
-if [ -n "$links_registered" ] ; then
-    # Unregister and delete all remaining registered links if unmodified. They no longer
-    # exist in the template directory
-    for f in $links_registered; do
-        IFS=':' read file link <<< """$f"""
-        if [ "$(readlink $file)" = "$link" ] ; then
-           # link is unchanged
-           rm -f $file
-        fi
-        # remove link from registration file
-        echo -n "Unregistering symlink ${file} ... "
-        f_escaped=$(echo "$f" | sed 's/[.[/\*^$]/\\&/g')
-        sed -ie "/^${f_escaped}$/d" $LINKSTATE && echo "done." || echo "failed."
-    done
-fi
-
-if [ -n "$registered" ] ; then
-    # Unregister and delete all remaining registered files. They no longer
-    # exist in the template directory
-    for f in $registered ; do
-        IFS=':' read ucf_file package exists changed <<< """$f"""
-
-        # Remove the file if unchanged and still existing
-        if [ "$changed" = "No" -a "$exists" = "Yes" ] ; then
-            echo -n "Removing ${ucf_file} ... "
-            rm "$ucf_file"
-            echo "done."
-        fi
-
-        # Unregister file
-        echo -n "Unregistering ${ucf_file} ... "
-        ucfr --purge --state-dir "$UCFDIR" "${USER}" "${ucf_file}"
-        ucf --purge --state-dir "$UCFDIR" "${ucf_file}"
-        echo "done."
-    done
-fi
-
-IFS="$OIFS"
+	else
+		echo "${FILE} is not yet in user's home"
+		# copy file to user's home
+		sync_with_home "${FILE}"
+	fi
+}
+find "${TEMPLATEDIR}" | while read FILE; do sync_template "${FILE}"; done

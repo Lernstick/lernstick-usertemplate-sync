@@ -11,7 +11,7 @@ Vcs-Git: https://github.com/imedias/lernstick-usertemplate-sync.git
 
 Package: lernstick-usertemplate-sync
 Architecture: all
-Depends: ucf, ${misc:Depends}
+Depends: ${misc:Depends}
 Description: Synchronize usertemplate files to users home directory
  This package installs a dpkg trigger to synchronize all files from /etc/skel
  to the users home directory. It uses UCF to preserve local modifications.
