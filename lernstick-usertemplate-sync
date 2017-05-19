@@ -9,6 +9,7 @@ exec > >(tee --append --ignore-interrupts $LOGFILE) 2>&1
 
 TEMPLATEDIR="/etc/skel/"
 USER="user"
+EXCLUDE_PATTERN="*.dpkg-new"
 
 # the REGDIR contains the last unmodified version of every config file
 REGDIR="/var/lib/lernstick-usertemplate-sync/${USER}"
@@ -18,7 +19,7 @@ REGDIR="/var/lib/lernstick-usertemplate-sync/${USER}"
 
 # copy *only(!)* new files to REGDIR
 cd "${TEMPLATEDIR}"
-cp -anv . "${REGDIR}"
+rsync --verbose --ignore-existing --exclude "${EXCLUDE_PATTERN}" --recursive ./ "${REGDIR}/"
 
 # abort if the user doesn't exist yet (happens during installation time)
 id --user --name "${USER}" > /dev/null 2>&1 || exit 0
@@ -31,8 +32,13 @@ USERHOME="$(getent passwd "${USER}" | cut -d: -f6)"
 
 sync_with_home()
 {
-	cp -av --parents "${1}" "${USERHOME}"
-	chown --recursive "$USER:$GROUP" "${USERHOME}/${1}"
+	if [ -d "${1}" ]
+	then
+		mkdir -p "${USERHOME}/${1}"
+	else
+		cp -av --parents "${1}" "${USERHOME}"
+	fi
+	chown "$USER:$GROUP" "${USERHOME}/${1}"
 }
 
 # sync template files to user's home and unmodified files to registry
@@ -99,4 +105,4 @@ sync_template()
 		sync_with_home "${FILE}"
 	fi
 }
-find "${TEMPLATEDIR}" ! -name '*.dpkg-new' | while read FILE; do sync_template "${FILE}"; done
+find "${TEMPLATEDIR}" ! -name "${EXCLUDE_PATTERN}" | while read FILE; do sync_template "${FILE}"; done
