@@ -1,3 +1,9 @@
+lernstick-usertemplate-sync (6) lernstick-8; urgency=medium
+
+  * [6b091f] improved handling of exclude pattern and directories
+
+ -- Ronny Standtke <ronny.standtke@gmx.net>  Fri, 19 May 2017 09:29:43 +0200
+
 lernstick-usertemplate-sync (5) lernstick-8; urgency=medium
 
   * [5353cf] ignore *.dpkg-new files, fill registry even when user doesn't exist yet
