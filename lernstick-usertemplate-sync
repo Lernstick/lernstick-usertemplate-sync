@@ -38,7 +38,7 @@ sync_with_home()
 	else
 		cp -av --parents "${1}" "${USERHOME}"
 	fi
-	chown "$USER:$GROUP" "${USERHOME}/${1}"
+	chown -h "$USER:$GROUP" "${USERHOME}/${1}"
 }
 
 # sync template files to user's home and unmodified files to registry
@@ -82,11 +82,11 @@ sync_template()
 		# handling for alredy existing symlinks
 		echo "${FILE} is already in user's home"
 
-		if [ $(readlink -f "${REGDIR}/${FILE}") = $(readlink -f "${USERHOME}/${FILE}") ]
+		if [ "$(readlink -f "${REGDIR}/${FILE}")" = "$(readlink -f "${USERHOME}/${FILE}")" ]
 		then
 			echo "${FILE} is unmodified"
 			# check if there is a new version in the template
-			if [ $(readlink -f "${REGDIR}/${FILE}") = $(readlink -f "${TEMPLATEDIR}/${FILE}") ]
+			if [ "$(readlink -f "${REGDIR}/${FILE}")" = "$(readlink -f "${TEMPLATEDIR}/${FILE}")" ]
 			then
 				echo "${FILE} has no new version in the template"
 			else
