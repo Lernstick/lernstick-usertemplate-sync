@@ -1,3 +1,10 @@
+lernstick-usertemplate-sync (7) lernstick-10; urgency=medium
+
+  * [a49140] improved support for symlinks, code cleanup
+  * [16f755] updated Debian maintainer files
+
+ -- Ronny Standtke <ronny.standtke@gmx.net>  Sun, 13 Dec 2020 22:23:52 +0100
+
 lernstick-usertemplate-sync (6) lernstick-8; urgency=medium
 
   * [6b091f] improved handling of exclude pattern and directories
