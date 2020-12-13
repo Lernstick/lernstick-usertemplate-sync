@@ -1,11 +1,9 @@
 Source: lernstick-usertemplate-sync
 Section: misc
 Priority: optional
-Maintainer: Lernstick Team <lernstick.ph@fhnw.ch>
-Uploaders: Ronny Standtke <ronny.standtke@fhnw.ch>, Gaudenz Steinlin <gaudenz@debian.org>
+Maintainer: Ronny Standtke <ronny.standtke@gmx.net>
 Build-Depends: debhelper (>= 9)
 Standards-Version: 3.9.6
-Homepage: http://www.imedias.ch/lernstick/
 Vcs-Browser: https://github.com/imedias/lernstick-usertemplate-sync.git
 Vcs-Git: https://github.com/imedias/lernstick-usertemplate-sync.git
 
@@ -14,4 +12,4 @@ Architecture: all
 Depends: ${misc:Depends}
 Description: Synchronize usertemplate files to users home directory
  This package installs a dpkg trigger to synchronize all files from /etc/skel
- to the users home directory. It uses UCF to preserve local modifications.
+ to the users home directory.
